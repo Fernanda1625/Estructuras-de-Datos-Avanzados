@@ -1,0 +1,110 @@
+import bisect
+from collections import namedtuple
+
+from scipy.spatial.distance import euclidean
+
+NO_QUADRANT = -1
+NORTH_WEST = 1
+NORTH_EAST = 2
+SOUTH_EAST = 3
+SOUTH_WEST = 4
+
+# Constantes para la optimización del acceso a tuplas
+CENTER = 0
+DIMENSION = 1
+X = 0
+Y = 1
+
+Point = namedtuple('Point', ['x', 'y'])
+Boundary = namedtuple('Boundary', ['center', 'dimension'])
+
+def belongs(boundary, point):
+    """ Compruebe si el punto pertenece al límite """
+    if not point:
+        return False
+
+    d = boundary[DIMENSION]
+    cx, cy = boundary[CENTER]
+    px, py = point
+
+    return (py <= cy + d and py >= cy - d) and (px <= cx + d and px >= cx - d)
+
+def quadrants(boundary, point):
+    """ Encuentra a qué cuadrante pertenece el punto """
+    if not isinstance(boundary, Boundary) or \
+       not isinstance(point, Point):
+        return False
+    
+    d = boundary[DIMENSION]
+    cx, cy = boundary[CENTER]
+    px, py = point
+
+    if (py <= cy + d and py >= cy) and (px >= cx - d and px <= cx):
+        return NORTH_WEST
+
+    if (py <= cy + d and py >= cy) and (px <= cx + d and px >= cx):
+        return NORTH_EAST
+
+    if (py >= cy - d and py <= cy) and (px <= cx + d and px >= cx):
+        return SOUTH_EAST
+
+    if (py >= cy - d and py <= cy) and (px >= cx - d and px <= cx):
+        return SOUTH_WEST
+
+    return NO_QUADRANT
+
+def intersects(boundary0, boundary1):
+    """ Compruebe si el límite dado se cruza con este límite """
+    if not boundary0 or not boundary1:
+        return False
+
+    ad      = boundary0[DIMENSION]
+    aleft   = boundary0[CENTER][X] - ad
+    aright  = boundary0[CENTER][X] + ad
+    atop    = boundary0[CENTER][Y] + ad
+    abottom = boundary0[CENTER][Y] - ad
+
+    bd      = boundary1[DIMENSION]
+    bleft   = boundary1[CENTER][X] - bd
+    bright  = boundary1[CENTER][X] + bd
+    btop    = boundary1[CENTER][Y] + bd
+    bbottom = boundary1[CENTER][Y] - bd
+
+    intersect_left  = bright > aleft and bleft < aleft
+    intersect_right = bleft < aright and bright > aright
+    intersect_top   = bbottom < atop and btop > atop
+    intersect_bottom= btop > abottom and bbottom < abottom
+
+    intersect_inside = (atop > btop and abottom < bbottom) or\
+                       (aleft < bleft and aright > bright)
+
+    return intersect_top and intersect_left  or\
+           intersect_top and intersect_right or\
+           intersect_bottom and intersect_left  or\
+           intersect_bottom and intersect_right or\
+           intersect_inside
+
+def compute_knn(points, point, k):
+    neighbors = []
+    distant_neighbor = None
+
+    for p in points:
+        if p == point: continue
+
+        dist = euclidean(point, p)
+        neighbor = (dist, p)
+
+        if len(neighbors) < k:
+            if not distant_neighbor:
+                distant_neighbor = neighbor
+            if neighbor[0] > distant_neighbor[0]:
+                distant_neighbor = neighbor
+            bisect.insort(neighbors, neighbor)
+            continue
+
+        if neighbor[0] < distant_neighbor[0]:
+            del neighbors[-1]
+            bisect.insort(neighbors, neighbor)
+            distant_neighbor = neighbors[-1]
+
+    return neighbors
